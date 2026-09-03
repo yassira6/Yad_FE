@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import { fetchUserRepos, GitHubApiError, repoZipUrl } from './api/github'
+import { fetchContents, fetchUserRepos, GitHubApiError, repoZipUrl } from './api/github'
 import { FileExplorer } from './components/FileExplorer'
 import { FileViewer } from './components/FileViewer'
 import { RepoList } from './components/RepoList'
+import { RepoOverview } from './components/RepoOverview'
 import { SourceBar } from './components/SourceBar'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import type { GitHubContentEntry, GitHubRepo } from './types'
@@ -52,6 +53,25 @@ function App() {
     setSelectedFile(null)
   }
 
+  const openFileByPath = async (filePath: string) => {
+    if (!selectedRepo) return
+    try {
+      const result = await fetchContents(
+        selectedRepo.owner.login,
+        selectedRepo.name,
+        filePath,
+        selectedRepo.default_branch,
+        token || null,
+      )
+      if (Array.isArray(result)) return
+      const dir = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : ''
+      setPath(dir)
+      setSelectedFile(result)
+    } catch {
+      // ignore — file may have been moved/deleted since the commit
+    }
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -93,6 +113,8 @@ function App() {
                   </a>
                 </div>
               </div>
+
+              <RepoOverview repo={selectedRepo} token={token || null} onOpenFile={openFileByPath} />
 
               <div className="explorer-layout">
                 <FileExplorer

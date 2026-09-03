@@ -1,4 +1,4 @@
-import type { GitHubContentEntry, GitHubFileContent, GitHubRepo } from '../types'
+import type { GitHubContentEntry, GitHubFileContent, GitHubRepo, LastCommit, LatestCommitDetail } from '../types'
 
 export class GitHubApiError extends Error {
   status: number
@@ -75,6 +75,34 @@ export function rawFileUrl(owner: string, repo: string, path: string, ref: strin
   return `/api/raw/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodePath(path)}?${params.toString()}`
 }
 
-export function repoZipUrl(owner: string, repo: string, ref: string): string {
-  return `/api/zip/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(ref)}`
+export function repoZipUrl(owner: string, repo: string, ref: string, path?: string): string {
+  const suffix = path ? `/${encodePath(path)}` : ''
+  return `/api/zip/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(ref)}${suffix}`
+}
+
+export function fetchLastCommit(
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+  token: string | null,
+): Promise<LastCommit | null> {
+  const params = new URLSearchParams({ ref })
+  return request(
+    `/last-commit/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodePath(path)}?${params.toString()}`,
+    token,
+  )
+}
+
+export function fetchLatestCommitDetail(
+  owner: string,
+  repo: string,
+  ref: string,
+  token: string | null,
+): Promise<LatestCommitDetail | null> {
+  const params = new URLSearchParams({ ref })
+  return request(
+    `/latest-commit/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}?${params.toString()}`,
+    token,
+  )
 }

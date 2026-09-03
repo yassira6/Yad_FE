@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { fetchContents, GitHubApiError } from '../api/github'
-import type { GitHubContentEntry, GitHubRepo } from '../types'
-import { formatBytes } from '../utils/file'
+import { fetchContents, fetchLastCommit, GitHubApiError, rawFileUrl, repoZipUrl } from '../api/github'
+import type { GitHubContentEntry, GitHubRepo, LastCommit } from '../types'
+import { formatBytes, formatDateTime } from '../utils/file'
 
 interface Props {
   repo: GitHubRepo
@@ -12,6 +12,8 @@ interface Props {
   onSelectFile: (entry: GitHubContentEntry) => void
 }
 
+const COMMIT_FETCH_CONCURRENCY = 4
+
 function icon(entry: GitHubContentEntry) {
   return entry.type === 'dir' ? '📁' : '📄'
 }
@@ -20,11 +22,13 @@ export function FileExplorer({ repo, path, token, selectedPath, onNavigate, onSe
   const [entries, setEntries] = useState<GitHubContentEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastCommits, setLastCommits] = useState<Record<string, LastCommit | null>>({})
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
+    setLastCommits({})
     fetchContents(repo.owner.login, repo.name, path, repo.default_branch, token)
       .then((result) => {
         if (cancelled) return
@@ -46,6 +50,32 @@ export function FileExplorer({ repo, path, token, selectedPath, onNavigate, onSe
       cancelled = true
     }
   }, [repo, path, token])
+
+  useEffect(() => {
+    if (entries.length === 0) return
+    let cancelled = false
+    const queue = [...entries]
+
+    async function worker() {
+      while (queue.length > 0) {
+        const entry = queue.shift()
+        if (!entry) return
+        try {
+          const commit = await fetchLastCommit(repo.owner.login, repo.name, entry.path, repo.default_branch, token)
+          if (!cancelled) setLastCommits((prev) => ({ ...prev, [entry.path]: commit }))
+        } catch {
+          if (!cancelled) setLastCommits((prev) => ({ ...prev, [entry.path]: null }))
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(COMMIT_FETCH_CONCURRENCY, entries.length) }, worker)
+    Promise.all(workers).catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [entries, repo, token])
 
   const crumbs = path ? path.split('/') : []
 
@@ -73,19 +103,39 @@ export function FileExplorer({ repo, path, token, selectedPath, onNavigate, onSe
 
       {!loading && !error && (
         <ul className="entry-list">
-          {entries.map((entry) => (
-            <li key={entry.path}>
-              <button
-                type="button"
-                className={`entry-item ${selectedPath === entry.path ? 'active' : ''}`}
-                onClick={() => (entry.type === 'dir' ? onNavigate(entry.path) : onSelectFile(entry))}
-              >
-                <span className="entry-icon">{icon(entry)}</span>
-                <span className="entry-name">{entry.name}</span>
-                {entry.type === 'file' && <span className="entry-size">{formatBytes(entry.size)}</span>}
-              </button>
-            </li>
-          ))}
+          {entries.map((entry) => {
+            const commit = lastCommits[entry.path]
+            const downloadHref =
+              entry.type === 'dir'
+                ? repoZipUrl(repo.owner.login, repo.name, repo.default_branch, entry.path)
+                : rawFileUrl(repo.owner.login, repo.name, entry.path, repo.default_branch, true)
+
+            return (
+              <li key={entry.path} className="entry-row">
+                <button
+                  type="button"
+                  className={`entry-item ${selectedPath === entry.path ? 'active' : ''}`}
+                  onClick={() => (entry.type === 'dir' ? onNavigate(entry.path) : onSelectFile(entry))}
+                >
+                  <span className="entry-icon">{icon(entry)}</span>
+                  <span className="entry-name">{entry.name}</span>
+                  {entry.type === 'file' && <span className="entry-size">{formatBytes(entry.size)}</span>}
+                </button>
+                <span className="entry-modified">
+                  {commit === undefined ? '…' : commit ? formatDateTime(commit.date) : '—'}
+                </span>
+                <a
+                  className="entry-download"
+                  href={downloadHref}
+                  onClick={(e) => e.stopPropagation()}
+                  title={entry.type === 'dir' ? `Download ${entry.name} as .zip` : `Download ${entry.name}`}
+                  aria-label={`Download ${entry.name}`}
+                >
+                  ⬇
+                </a>
+              </li>
+            )
+          })}
           {entries.length === 0 && <li className="empty">This folder is empty.</li>}
         </ul>
       )}

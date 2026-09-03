@@ -124,3 +124,98 @@ export async function getRawFile(
 export async function getZipball(owner: string, repo: string, ref: string, token?: string): Promise<Response> {
   return ghFetch(`/repos/${owner}/${repo}/zipball/${encodeURIComponent(ref)}`, token)
 }
+
+export interface LastCommit {
+  sha: string
+  message: string
+  author: string | null
+  date: string | null
+}
+
+interface CommitListItem {
+  sha: string
+  commit: {
+    message: string
+    author: { name?: string; date?: string } | null
+    committer: { name?: string; date?: string } | null
+  }
+}
+
+export async function getLastCommitForPath(
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+  token?: string,
+): Promise<LastCommit | null> {
+  const encodedPath = path
+    .split('/')
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join('/')
+  const pathQuery = encodedPath ? `&path=${encodedPath}` : ''
+  const res = await ghFetch(
+    `/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(ref)}&per_page=1${pathQuery}`,
+    token,
+  )
+  const commits = (await res.json()) as CommitListItem[]
+  const commit = commits[0]
+  if (!commit) return null
+  return {
+    sha: commit.sha,
+    message: commit.commit.message.split('\n')[0] ?? '',
+    author: commit.commit.author?.name ?? commit.commit.committer?.name ?? null,
+    date: commit.commit.author?.date ?? commit.commit.committer?.date ?? null,
+  }
+}
+
+export interface LatestCommitDetail extends LastCommit {
+  htmlUrl: string
+  files: { filename: string; status: string; additions: number; deletions: number }[]
+}
+
+export async function getLatestCommitDetail(
+  owner: string,
+  repo: string,
+  ref: string,
+  token?: string,
+): Promise<LatestCommitDetail | null> {
+  const listRes = await ghFetch(`/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(ref)}&per_page=1`, token)
+  const commits = (await listRes.json()) as CommitListItem[]
+  const latest = commits[0]
+  if (!latest) return null
+
+  const detailRes = await ghFetch(`/repos/${owner}/${repo}/commits/${latest.sha}`, token)
+  const detail = (await detailRes.json()) as CommitListItem & {
+    html_url: string
+    files?: { filename: string; status: string; additions: number; deletions: number }[]
+  }
+
+  return {
+    sha: detail.sha,
+    message: detail.commit.message.split('\n')[0] ?? '',
+    author: detail.commit.author?.name ?? detail.commit.committer?.name ?? null,
+    date: detail.commit.author?.date ?? detail.commit.committer?.date ?? null,
+    htmlUrl: detail.html_url,
+    files: detail.files ?? [],
+  }
+}
+
+export interface TreeEntry {
+  path: string
+  type: 'blob' | 'tree' | 'commit'
+  sha: string
+  size?: number
+}
+
+export async function getRecursiveTree(owner: string, repo: string, ref: string, token?: string): Promise<TreeEntry[]> {
+  const res = await ghFetch(`/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`, token)
+  const body = (await res.json()) as { tree: TreeEntry[]; truncated?: boolean }
+  return body.tree
+}
+
+export async function getBlob(owner: string, repo: string, sha: string, token?: string): Promise<Buffer> {
+  const res = await ghFetch(`/repos/${owner}/${repo}/git/blobs/${sha}`, token)
+  const body = (await res.json()) as { content: string; encoding: string }
+  return Buffer.from(body.content, body.encoding === 'base64' ? 'base64' : 'utf-8')
+}

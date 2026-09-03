@@ -26,3 +26,15 @@ export interface GitHubFileContent extends GitHubContentEntry {
   content?: string
   encoding?: 'base64'
 }
+
+export interface LastCommit {
+  sha: string
+  message: string
+  author: string | null
+  date: string | null
+}
+
+export interface LatestCommitDetail extends LastCommit {
+  htmlUrl: string
+  files: { filename: string; status: string; additions: number; deletions: number }[]
+}

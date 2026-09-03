@@ -4,8 +4,17 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
-import { GitHubUpstreamError, getContents, getRawFile, getZipball, listRepos } from './githubClient.js'
+import {
+  GitHubUpstreamError,
+  getContents,
+  getLastCommitForPath,
+  getLatestCommitDetail,
+  getRawFile,
+  getZipball,
+  listRepos,
+} from './githubClient.js'
 import { mimeTypeFor } from './mime.js'
+import { streamFolderZip, ZipBuildError } from './zip.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 8787
@@ -29,6 +38,10 @@ function pathParam(req: Request): string {
 function sendError(res: Response, err: unknown) {
   if (err instanceof GitHubUpstreamError) {
     res.status(err.status).json({ message: err.message })
+    return
+  }
+  if (err instanceof ZipBuildError) {
+    res.status(404).json({ message: err.message })
     return
   }
   console.error(err)
@@ -74,15 +87,54 @@ app.get('/api/raw/:owner/:repo{/*path}', async (req, res) => {
   }
 })
 
-app.get('/api/zip/:owner/:repo/:ref', async (req, res) => {
+app.get('/api/last-commit/:owner/:repo{/*path}', async (req, res) => {
+  try {
+    const { owner, repo } = req.params
+    const ref = typeof req.query.ref === 'string' ? req.query.ref : undefined
+    if (!ref) {
+      res.status(400).json({ message: 'A ref is required.' })
+      return
+    }
+    const commit = await getLastCommitForPath(owner, repo, pathParam(req), ref, tokenFrom(req))
+    res.json(commit)
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+app.get('/api/latest-commit/:owner/:repo', async (req, res) => {
+  try {
+    const { owner, repo } = req.params
+    const ref = typeof req.query.ref === 'string' ? req.query.ref : undefined
+    if (!ref) {
+      res.status(400).json({ message: 'A ref is required.' })
+      return
+    }
+    res.json(await getLatestCommitDetail(owner, repo, ref, tokenFrom(req)))
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+app.get('/api/zip/:owner/:repo/:ref{/*path}', async (req, res) => {
   try {
     const { owner, repo, ref } = req.params
+    const folderPath = pathParam(req)
+    const safeRef = ref.replace(/[^a-zA-Z0-9._-]+/g, '-')
+
+    if (folderPath) {
+      const safeFolder = folderPath.replace(/[^a-zA-Z0-9._-]+/g, '-')
+      res.setHeader('Content-Type', 'application/zip')
+      res.setHeader('Content-Disposition', `attachment; filename="${repo}-${safeFolder}.zip"`)
+      await streamFolderZip(res, owner, repo, ref, folderPath, tokenFrom(req))
+      return
+    }
+
     const upstream = await getZipball(owner, repo, ref, tokenFrom(req))
     if (!upstream.body) {
       res.status(502).json({ message: 'No response body from GitHub.' })
       return
     }
-    const safeRef = ref.replace(/[^a-zA-Z0-9._-]+/g, '-')
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="${repo}-${safeRef}.zip"`)
     Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream).pipe(res)
