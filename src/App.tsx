@@ -6,6 +6,7 @@ import { FileExplorer } from './components/FileExplorer'
 import { FileViewer } from './components/FileViewer'
 import { RepoList } from './components/RepoList'
 import { RepoOverview } from './components/RepoOverview'
+import { SaveToFolderButton } from './components/SaveToFolderButton'
 import { SourceBar } from './components/SourceBar'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import type { GitHubContentEntry, GitHubRepo } from './types'
@@ -112,6 +113,7 @@ function App() {
                   <a href={repoZipUrl(selectedRepo.owner.login, selectedRepo.name, selectedRepo.default_branch)}>
                     Download repo (.zip)
                   </a>
+                  <SaveToFolderButton repo={selectedRepo} token={token || null} />
                   <DownloadAllButton repo={selectedRepo} token={token || null} />
                 </div>
               </div>

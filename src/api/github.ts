@@ -60,6 +60,22 @@ export async function fetchContents(
   )
 }
 
+async function fetchRaw(
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string | undefined,
+  token: string | null,
+): Promise<Response> {
+  const refQuery = ref ? `?ref=${encodeURIComponent(ref)}` : ''
+  const res = await fetch(
+    `/api/raw/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodePath(path)}${refQuery}`,
+    { headers: authHeaders(token) },
+  )
+  if (!res.ok) throw new GitHubApiError(await parseError(res), res.status)
+  return res
+}
+
 export async function fetchRawText(
   owner: string,
   repo: string,
@@ -67,13 +83,19 @@ export async function fetchRawText(
   ref: string | undefined,
   token: string | null,
 ): Promise<string> {
-  const refQuery = ref ? `?ref=${encodeURIComponent(ref)}` : ''
-  const res = await fetch(
-    `/api/raw/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodePath(path)}${refQuery}`,
-    { headers: authHeaders(token) },
-  )
-  if (!res.ok) throw new GitHubApiError(await parseError(res), res.status)
+  const res = await fetchRaw(owner, repo, path, ref, token)
   return res.text()
+}
+
+export async function fetchRawBlob(
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string | undefined,
+  token: string | null,
+): Promise<Blob> {
+  const res = await fetchRaw(owner, repo, path, ref, token)
+  return res.blob()
 }
 
 export function rawFileUrl(
