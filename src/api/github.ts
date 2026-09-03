@@ -1,4 +1,11 @@
-import type { GitHubContentEntry, GitHubFileContent, GitHubRepo, LastCommit, LatestCommitDetail } from '../types'
+import type {
+  GitHubContentEntry,
+  GitHubFileContent,
+  GitHubRepo,
+  LastCommit,
+  LatestCommitDetail,
+  RepoFileEntry,
+} from '../types'
 
 export class GitHubApiError extends Error {
   status: number
@@ -69,9 +76,19 @@ export async function fetchRawText(
   return res.text()
 }
 
-export function rawFileUrl(owner: string, repo: string, path: string, ref: string, download: boolean): string {
+export function rawFileUrl(
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+  download: boolean,
+  downloadName?: string,
+): string {
   const params = new URLSearchParams({ ref })
-  if (download) params.set('download', '1')
+  if (download) {
+    params.set('download', '1')
+    if (downloadName) params.set('name', downloadName)
+  }
   return `/api/raw/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodePath(path)}?${params.toString()}`
 }
 
@@ -90,6 +107,20 @@ export function fetchLastCommit(
   const params = new URLSearchParams({ ref })
   return request(
     `/last-commit/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodePath(path)}?${params.toString()}`,
+    token,
+  )
+}
+
+export function fetchFileList(
+  owner: string,
+  repo: string,
+  ref: string,
+  path: string,
+  token: string | null,
+): Promise<RepoFileEntry[]> {
+  const suffix = path ? `/${encodePath(path)}` : ''
+  return request(
+    `/file-list/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(ref)}${suffix}`,
     token,
   )
 }

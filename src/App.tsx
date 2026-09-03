@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import { fetchContents, fetchUserRepos, GitHubApiError, repoZipUrl } from './api/github'
+import { DownloadAllButton } from './components/DownloadAllButton'
 import { FileExplorer } from './components/FileExplorer'
 import { FileViewer } from './components/FileViewer'
 import { RepoList } from './components/RepoList'
@@ -111,6 +112,7 @@ function App() {
                   <a href={repoZipUrl(selectedRepo.owner.login, selectedRepo.name, selectedRepo.default_branch)}>
                     Download repo (.zip)
                   </a>
+                  <DownloadAllButton repo={selectedRepo} token={token || null} />
                 </div>
               </div>
 

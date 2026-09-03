@@ -10,6 +10,7 @@ import {
   getLastCommitForPath,
   getLatestCommitDetail,
   getRawFile,
+  getRecursiveTree,
   getZipball,
   listRepos,
 } from './githubClient.js'
@@ -79,7 +80,9 @@ app.get('/api/raw/:owner/:repo{/*path}', async (req, res) => {
     res.setHeader('Content-Type', mimeTypeFor(filename))
     res.setHeader('Cache-Control', 'private, max-age=60')
     if (req.query.download === '1') {
-      res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`)
+      const overrideName = typeof req.query.name === 'string' ? req.query.name : undefined
+      const downloadName = (overrideName || filename).replace(/[\\"]/g, '')
+      res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`)
     }
     res.send(buffer)
   } catch (err) {
@@ -111,6 +114,21 @@ app.get('/api/latest-commit/:owner/:repo', async (req, res) => {
       return
     }
     res.json(await getLatestCommitDetail(owner, repo, ref, tokenFrom(req)))
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+app.get('/api/file-list/:owner/:repo/:ref{/*path}', async (req, res) => {
+  try {
+    const { owner, repo, ref } = req.params
+    const folderPath = pathParam(req)
+    const prefix = folderPath ? `${folderPath}/` : ''
+    const tree = await getRecursiveTree(owner, repo, ref, tokenFrom(req))
+    const files = tree
+      .filter((entry) => entry.type === 'blob' && entry.path.startsWith(prefix))
+      .map((entry) => ({ path: entry.path, size: entry.size ?? 0 }))
+    res.json(files)
   } catch (err) {
     sendError(res, err)
   }

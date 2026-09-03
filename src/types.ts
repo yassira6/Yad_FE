@@ -38,3 +38,8 @@ export interface LatestCommitDetail extends LastCommit {
   htmlUrl: string
   files: { filename: string; status: string; additions: number; deletions: number }[]
 }
+
+export interface RepoFileEntry {
+  path: string
+  size: number
+}
