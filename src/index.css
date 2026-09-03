@@ -1,0 +1,39 @@
+:root {
+  color-scheme: light dark;
+  --bg: #0f1117;
+  --panel: #161925;
+  --panel-alt: #1d2130;
+  --border: #2a2f42;
+  --text: #e7e9f0;
+  --text-muted: #9297ab;
+  --accent: #6c8cff;
+  --accent-strong: #4f6de0;
+  --danger: #ff6b6b;
+  font-family: 'SF Mono', 'Cascadia Code', Consolas, 'JetBrains Mono', monospace, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+button, input, a {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  text-decoration: none;
+}
