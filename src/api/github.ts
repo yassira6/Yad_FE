@@ -1,7 +1,5 @@
 import type { GitHubContentEntry, GitHubFileContent, GitHubRepo } from '../types'
 
-const API_ROOT = 'https://api.github.com'
-
 export class GitHubApiError extends Error {
   status: number
   constructor(message: string, status: number) {
@@ -11,50 +9,34 @@ export class GitHubApiError extends Error {
 }
 
 function authHeaders(token: string | null): HeadersInit {
-  const headers: HeadersInit = { Accept: 'application/vnd.github+json' }
+  const headers: HeadersInit = {}
   if (token) headers.Authorization = `Bearer ${token}`
   return headers
 }
 
-async function request<T>(path: string, token: string | null): Promise<T> {
-  const res = await fetch(`${API_ROOT}${path}`, { headers: authHeaders(token) })
-  if (!res.ok) {
-    let message = `GitHub API error (${res.status})`
-    if (res.status === 403) {
-      const remaining = res.headers.get('x-ratelimit-remaining')
-      message =
-        remaining === '0'
-          ? 'GitHub API rate limit exceeded. Add a personal access token to raise the limit.'
-          : 'Access forbidden. The repo may be private — add a personal access token with repo access.'
-    } else if (res.status === 404) {
-      message = 'Not found. Check the owner/repo name, or add a token if this repo is private.'
-    } else {
-      try {
-        const body = await res.json()
-        if (body?.message) message = body.message
-      } catch {
-        // ignore
-      }
-    }
-    throw new GitHubApiError(message, res.status)
+function encodePath(path: string): string {
+  return path.split('/').filter(Boolean).map(encodeURIComponent).join('/')
+}
+
+async function parseError(res: Response): Promise<string> {
+  let message = `Request failed (${res.status})`
+  try {
+    const body = await res.json()
+    if (body?.message) message = body.message
+  } catch {
+    // ignore
   }
+  return message
+}
+
+async function request<T>(path: string, token: string | null): Promise<T> {
+  const res = await fetch(`/api${path}`, { headers: authHeaders(token) })
+  if (!res.ok) throw new GitHubApiError(await parseError(res), res.status)
   return res.json() as Promise<T>
 }
 
 export function fetchUserRepos(owner: string, token: string | null): Promise<GitHubRepo[]> {
-  return request<GitHubRepo[]>(
-    `/users/${encodeURIComponent(owner)}/repos?per_page=100&sort=updated`,
-    token,
-  ).catch(async (err) => {
-    if (err instanceof GitHubApiError && err.status === 404 && token) {
-      return request<GitHubRepo[]>(`/orgs/${encodeURIComponent(owner)}/repos?per_page=100&sort=updated`, token)
-    }
-    throw err
-  })
-}
-
-export function fetchAuthenticatedUserRepos(token: string): Promise<GitHubRepo[]> {
-  return request<GitHubRepo[]>('/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member', token)
+  return request<GitHubRepo[]>(`/repos/${encodeURIComponent(owner)}`, token)
 }
 
 export async function fetchContents(
@@ -65,17 +47,34 @@ export async function fetchContents(
   token: string | null,
 ): Promise<GitHubContentEntry[] | GitHubFileContent> {
   const refQuery = ref ? `?ref=${encodeURIComponent(ref)}` : ''
-  return request(`/repos/${owner}/${repo}/contents/${path}${refQuery}`, token)
+  return request(
+    `/contents/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodePath(path)}${refQuery}`,
+    token,
+  )
 }
 
-export function decodeBase64Content(content: string): string {
-  const cleaned = content.replace(/\n/g, '')
-  const binary = atob(cleaned)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return new TextDecoder('utf-8').decode(bytes)
+export async function fetchRawText(
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string | undefined,
+  token: string | null,
+): Promise<string> {
+  const refQuery = ref ? `?ref=${encodeURIComponent(ref)}` : ''
+  const res = await fetch(
+    `/api/raw/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodePath(path)}${refQuery}`,
+    { headers: authHeaders(token) },
+  )
+  if (!res.ok) throw new GitHubApiError(await parseError(res), res.status)
+  return res.text()
+}
+
+export function rawFileUrl(owner: string, repo: string, path: string, ref: string, download: boolean): string {
+  const params = new URLSearchParams({ ref })
+  if (download) params.set('download', '1')
+  return `/api/raw/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodePath(path)}?${params.toString()}`
 }
 
 export function repoZipUrl(owner: string, repo: string, ref: string): string {
-  return `https://github.com/${owner}/${repo}/archive/refs/heads/${ref}.zip`
+  return `/api/zip/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(ref)}`
 }

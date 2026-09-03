@@ -88,9 +88,6 @@ function App() {
                   {selectedRepo.description && <p>{selectedRepo.description}</p>}
                 </div>
                 <div className="repo-header-actions">
-                  <a href={selectedRepo.html_url} target="_blank" rel="noreferrer">
-                    View on GitHub
-                  </a>
                   <a href={repoZipUrl(selectedRepo.owner.login, selectedRepo.name, selectedRepo.default_branch)}>
                     Download repo (.zip)
                   </a>

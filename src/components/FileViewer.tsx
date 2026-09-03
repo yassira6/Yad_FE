@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { decodeBase64Content, fetchContents, GitHubApiError } from '../api/github'
-import type { GitHubContentEntry, GitHubFileContent, GitHubRepo } from '../types'
+import { fetchRawText, GitHubApiError, rawFileUrl } from '../api/github'
+import type { GitHubContentEntry, GitHubRepo } from '../types'
 import { formatBytes, looksBinary } from '../utils/file'
 
 interface Props {
@@ -28,29 +28,18 @@ export function FileViewer({ repo, entry, token, onClose }: Props) {
     }
     setLoading(true)
 
-    async function load() {
-      try {
-        const result = await fetchContents(repo.owner.login, repo.name, entry.path, repo.default_branch, token)
-        if (cancelled) return
-        const file = result as GitHubFileContent
-        if (file.content && file.encoding === 'base64') {
-          setContent(decodeBase64Content(file.content))
-        } else if (file.download_url) {
-          const res = await fetch(file.download_url)
-          if (!res.ok) throw new Error(`Failed to fetch raw file (${res.status})`)
-          setContent(await res.text())
-        } else {
-          setError('No content available for this file.')
-        }
-      } catch (err) {
+    fetchRawText(repo.owner.login, repo.name, entry.path, repo.default_branch, token)
+      .then((text) => {
+        if (!cancelled) setContent(text)
+      })
+      .catch((err) => {
         if (cancelled) return
         setError(err instanceof GitHubApiError ? err.message : 'Failed to load file content.')
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false)
-      }
-    }
+      })
 
-    load()
     return () => {
       cancelled = true
     }
@@ -64,14 +53,13 @@ export function FileViewer({ repo, entry, token, onClose }: Props) {
   }
 
   const download = () => {
-    if (content !== null) {
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      triggerDownload(url, entry.name)
-      URL.revokeObjectURL(url)
-    } else if (entry.download_url) {
-      triggerDownload(entry.download_url, entry.name)
-    }
+    const url = rawFileUrl(repo.owner.login, repo.name, entry.path, repo.default_branch, true)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = entry.name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
   }
 
   return (
@@ -85,12 +73,9 @@ export function FileViewer({ repo, entry, token, onClose }: Props) {
           <button type="button" onClick={copy} disabled={!content}>
             {copied ? 'Copied!' : 'Copy'}
           </button>
-          <button type="button" onClick={download} disabled={!content && !entry.download_url}>
+          <button type="button" onClick={download}>
             Download
           </button>
-          <a className="ghost-link" href={entry.html_url} target="_blank" rel="noreferrer">
-            View on GitHub
-          </a>
           <button type="button" className="close-btn" onClick={onClose} aria-label="Close file">
             ✕
           </button>
@@ -109,13 +94,4 @@ export function FileViewer({ repo, entry, token, onClose }: Props) {
       </div>
     </div>
   )
-}
-
-function triggerDownload(url: string, filename: string) {
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
 }
