@@ -4,6 +4,7 @@ import { fetchContents, fetchUserRepos, GitHubApiError, repoZipUrl } from './api
 import { DownloadAllButton } from './components/DownloadAllButton'
 import { FileExplorer } from './components/FileExplorer'
 import { FileViewer } from './components/FileViewer'
+import { HelpPage } from './components/HelpPage'
 import { RepoList } from './components/RepoList'
 import { RepoOverview } from './components/RepoOverview'
 import { SaveToFolderButton } from './components/SaveToFolderButton'
@@ -22,6 +23,7 @@ function App() {
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null)
   const [path, setPath] = useState('')
   const [selectedFile, setSelectedFile] = useState<GitHubContentEntry | null>(null)
+  const [showHelp, setShowHelp] = useState(false)
 
   const loadRepos = (ownerToLoad: string) => {
     if (!ownerToLoad) return
@@ -74,11 +76,28 @@ function App() {
     }
   }
 
+  if (showHelp) {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <h1>Yad File Explorer</h1>
+          <p className="subtitle">Browse GitHub repositories, view file contents, copy, and download.</p>
+        </header>
+        <HelpPage onClose={() => setShowHelp(false)} />
+      </div>
+    )
+  }
+
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Yad File Explorer</h1>
-        <p className="subtitle">Browse GitHub repositories, view file contents, copy, and download.</p>
+        <div>
+          <h1>Yad File Explorer</h1>
+          <p className="subtitle">Browse GitHub repositories, view file contents, copy, and download.</p>
+        </div>
+        <button type="button" className="link-button help-link" onClick={() => setShowHelp(true)}>
+          Help
+        </button>
       </header>
 
       <SourceBar
